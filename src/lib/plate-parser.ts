@@ -1,10 +1,22 @@
-// Common license plate patterns (US, EU-style)
-const PLATE_PATTERNS = [
-  /^[A-Z0-9]{2,3}[-\s]?[A-Z0-9]{2,4}$/,       // e.g. ABC 1234, AB-1234
-  /^[0-9]{1,4}[-\s]?[A-Z]{2,3}$/,               // e.g. 1234 AB
-  /^[A-Z]{1,3}[-\s]?[0-9]{1,4}[-\s]?[A-Z]{0,3}$/, // e.g. B 123 ABC
-  /^[0-9]{1,3}[-\s]?[A-Z]{1,3}[-\s]?[0-9]{1,4}$/, // e.g. 7 ABC 1234
+// Bulgarian plates: 1-2 Cyrillic letters + 4 digits + 2 Cyrillic letters
+// Tesseract reads Cyrillic as Latin lookalikes: С→C, В→B, А→A, Е→E, К→K, М→M, Н→H, О→O, Р→P, Т→T, Х→X
+// e.g. "СВ 1333 МР" → "CB 1333 MP"
+
+const BG_PLATE_PATTERNS = [
+  /^[A-Z]{1,2}\s?\d{4}\s?[A-Z]{2}$/,            // CB 1333 MP
+  /^[A-Z]{1,2}\d{4}[A-Z]{2}$/,                   // CB1333MP
+  /^[A-Z]{1,2}\s?\d{4}\s?[A-Z]{1,2}$/,           // looser: C 1333 M
+  /^[A-Z]{2}\s?\d{3,4}\s?[A-Z]{1,2}$/,           // CB 133 MP (3 digits variant)
 ];
+
+const US_EU_PATTERNS = [
+  /^[A-Z0-9]{2,3}[-\s]?[A-Z0-9]{2,4}$/,
+  /^[0-9]{1,4}[-\s]?[A-Z]{2,3}$/,
+  /^[A-Z]{1,3}[-\s]?[0-9]{1,4}[-\s]?[A-Z]{0,3}$/,
+  /^[0-9]{1,3}[-\s]?[A-Z]{1,3}[-\s]?[0-9]{1,4}$/,
+];
+
+const ALL_PATTERNS = [...BG_PLATE_PATTERNS, ...US_EU_PATTERNS];
 
 export interface ParsedPlate {
   text: string;
@@ -21,59 +33,70 @@ function cleanText(raw: string): string {
 }
 
 function looksLikePlate(text: string): boolean {
-  if (text.length < 4 || text.length > 10) return false;
+  if (text.length < 4 || text.length > 12) return false;
   const hasDigits = /[0-9]/.test(text);
   const hasLetters = /[A-Z]/.test(text);
   if (!hasDigits || !hasLetters) return false;
   const stripped = text.replace(/[\s-]/g, "");
-  return PLATE_PATTERNS.some((p) => p.test(stripped));
+  return ALL_PATTERNS.some((p) => p.test(stripped));
+}
+
+/** Attempt to normalize OCR noise into a Bulgarian plate format */
+function tryBulgarianNormalize(text: string): string | null {
+  const stripped = text.replace(/[\s-]/g, "");
+  // Try to match: 1-2 letters, 3-4 digits, 1-2 letters
+  const m = stripped.match(/^([A-Z]{1,2})(\d{3,4})([A-Z]{1,2})$/);
+  if (m) {
+    return `${m[1]} ${m[2]} ${m[3]}`;
+  }
+  return null;
 }
 
 export function extractPlates(
   words: { text: string; confidence: number }[]
 ): ParsedPlate[] {
   const results: ParsedPlate[] = [];
+  const seen = new Set<string>();
 
+  // Single word check
   for (const word of words) {
     const cleaned = cleanText(word.text);
     if (cleaned.length < 2) continue;
-    const isPlate = looksLikePlate(cleaned);
-    if (isPlate) {
-      results.push({
-        text: cleaned,
-        confidence: word.confidence,
-        isPlatePattern: true,
-      });
+    if (looksLikePlate(cleaned)) {
+      const normalized = tryBulgarianNormalize(cleaned) ?? cleaned;
+      if (!seen.has(normalized)) {
+        seen.add(normalized);
+        results.push({ text: normalized, confidence: word.confidence, isPlatePattern: true });
+      }
     }
   }
 
-  if (results.length === 0) {
-    const allText = words.map((w) => cleanText(w.text)).join(" ");
-    const windowSizes = [2, 3, 4];
-    for (const size of windowSizes) {
-      for (let i = 0; i <= words.length - size; i++) {
-        const group = words.slice(i, i + size);
-        const combined = group.map((w) => cleanText(w.text)).join("");
-        if (looksLikePlate(combined)) {
-          const avgConf =
-            group.reduce((s, w) => s + w.confidence, 0) / group.length;
-          results.push({
-            text: combined,
-            confidence: avgConf,
-            isPlatePattern: true,
-          });
+  // Sliding window over adjacent words (combine 2-4 words)
+  const windowSizes = [2, 3, 4];
+  for (const size of windowSizes) {
+    for (let i = 0; i <= words.length - size; i++) {
+      const group = words.slice(i, i + size);
+      const combined = group.map((w) => cleanText(w.text)).join("");
+      if (combined.length < 4) continue;
+      if (looksLikePlate(combined)) {
+        const normalized = tryBulgarianNormalize(combined) ?? combined;
+        if (!seen.has(normalized)) {
+          seen.add(normalized);
+          const avgConf = group.reduce((s, w) => s + w.confidence, 0) / group.length;
+          results.push({ text: normalized, confidence: avgConf, isPlatePattern: true });
         }
       }
-    }
-
-    if (results.length === 0 && allText.length >= 3) {
-      const avgConf =
-        words.reduce((s, w) => s + w.confidence, 0) / (words.length || 1);
-      results.push({
-        text: allText.slice(0, 10),
-        confidence: avgConf * 0.5,
-        isPlatePattern: false,
-      });
+      // Also try with spaces preserved
+      const spaced = group.map((w) => cleanText(w.text)).join(" ");
+      if (looksLikePlate(spaced) && !seen.has(spaced)) {
+        seen.add(spaced);
+        const avgConf = group.reduce((s, w) => s + w.confidence, 0) / group.length;
+        const normalized = tryBulgarianNormalize(spaced.replace(/\s/g, "")) ?? spaced;
+        if (!seen.has(normalized)) {
+          seen.add(normalized);
+          results.push({ text: normalized, confidence: avgConf, isPlatePattern: true });
+        }
+      }
     }
   }
 

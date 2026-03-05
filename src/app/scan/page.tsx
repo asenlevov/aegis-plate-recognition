@@ -46,6 +46,11 @@ export default function ScanPage() {
     setResult(null);
   };
 
+  // Camera mode renders a full-screen overlay — no scroll needed
+  if (mode === "camera") {
+    return <CameraCapture onStop={() => setMode("select")} />;
+  }
+
   return (
     <div className="max-w-lg mx-auto px-4 pt-6 space-y-4">
       {/* Header */}
@@ -78,7 +83,10 @@ export default function ScanPage() {
                 <Camera size={24} />
               </div>
               <span className="font-mono text-xs tracking-wider text-aegis-muted group-hover:text-aegis-text">
-                CAMERA
+                LIVE SCAN
+              </span>
+              <span className="text-[9px] font-mono text-aegis-muted/50">
+                REAL-TIME DETECTION
               </span>
             </button>
             <button
@@ -91,20 +99,10 @@ export default function ScanPage() {
               <span className="font-mono text-xs tracking-wider text-aegis-muted group-hover:text-aegis-text">
                 UPLOAD
               </span>
+              <span className="text-[9px] font-mono text-aegis-muted/50">
+                ANALYZE IMAGE
+              </span>
             </button>
-          </motion.div>
-        )}
-
-        {mode === "camera" && (
-          <motion.div
-            key="camera"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <HUDCard title="Live Feed">
-              <CameraCapture onCapture={processImage} />
-            </HUDCard>
           </motion.div>
         )}
 
@@ -129,7 +127,6 @@ export default function ScanPage() {
             exit={{ opacity: 0 }}
             className="space-y-4"
           >
-            {/* Source image preview */}
             <HUDCard title="Source Image">
               <div className="relative">
                 <img
@@ -144,7 +141,6 @@ export default function ScanPage() {
               </div>
             </HUDCard>
 
-            {/* Results */}
             {mode === "results" && result && (
               <ScanResults
                 detections={result.detections}
