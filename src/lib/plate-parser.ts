@@ -160,7 +160,13 @@ export function extractPlates(
     }
   }
 
-  results.sort((a, b) => b.confidence - a.confidence);
+  // Prefer longer plate texts (more complete), then higher confidence
+  results.sort((a, b) => {
+    const lenA = a.text.replace(/\s/g, "").length;
+    const lenB = b.text.replace(/\s/g, "").length;
+    if (lenA !== lenB) return lenB - lenA;
+    return b.confidence - a.confidence;
+  });
   return results.slice(0, 5);
 }
 

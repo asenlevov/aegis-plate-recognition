@@ -26,7 +26,7 @@ async function getOrt() {
   if (ortModule) return ortModule;
   ortModule = await import("onnxruntime-web");
   ortModule.env.wasm.wasmPaths =
-    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/";
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.2/dist/";
   ortModule.env.wasm.numThreads = 1;
   return ortModule;
 }
@@ -134,14 +134,13 @@ export async function detectPlates(
 
   const inputName = session.inputNames[0];
   const results = await session.run({ [inputName]: tensor });
-  const output = results[session.outputNames[0]];
+  const outputName = session.outputNames[0];
+  const output = results[outputName];
   const raw = output.data as Float32Array;
-  const dims = output.dims; // [1, 5, num_boxes] for YOLOv8 single-class
+  const dims = output.dims;
 
-  // YOLOv8 output: [1, 4+num_classes, num_boxes]
-  // rows: [cx, cy, w, h, conf_class0, ...]
   const numBoxes = dims[2];
-  const numFields = dims[1]; // 5 for single-class
+  const numFields = dims[1];
   const detections: Detection[] = [];
 
   for (let i = 0; i < numBoxes; i++) {

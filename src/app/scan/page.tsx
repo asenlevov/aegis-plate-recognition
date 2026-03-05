@@ -158,6 +158,24 @@ export default function ScanPage() {
           <p className="text-[10px] font-mono text-aegis-muted mb-3 tracking-wider">
             TAP A SAMPLE TO SCAN INSTANTLY
           </p>
+
+          {/* Real photo test */}
+          <button
+            onClick={() => processImage("/sample-plates/car_test.jpg")}
+            className="w-full mb-3 relative aspect-video rounded border border-aegis-green/30 overflow-hidden hover:border-aegis-green/60 transition-colors group bg-aegis-surface flex items-center justify-center"
+          >
+            <img
+              src="/sample-plates/car_test.jpg"
+              alt="Bulgarian plate test"
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+              <span className="text-[10px] font-mono text-aegis-green tracking-wider">
+                BG PLATE TEST — CB 1000 KA
+              </span>
+            </div>
+          </button>
+
           <div className="grid grid-cols-3 gap-2">
             {[1, 2, 3].map((n) => (
               <button
